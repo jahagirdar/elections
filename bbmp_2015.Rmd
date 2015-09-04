@@ -1,0 +1,240 @@
+---
+title: 'BBMP Election Analysis: BBMP 2015'
+author: "Vijayvithal"
+output: html_document
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r,echo=FALSE,}
+
+require(xlsx)
+require(ggplot2)
+require(igraph)
+require(reshape2)
+bbmp<-read.xlsx("Combined.xlsx",1)
+
+levels(bbmp$Previous.Party) <-levels(bbmp$This.Winner)
+bbmp_complete<-bbmp[complete.cases(data.frame(bbmp$Vote.percentage,bbmp$Voter_turnout_2010)),]
+less_turnout<-bbmp_complete[bbmp_complete$Vote.percentage < bbmp_complete$Voter_turnout_2010,]
+```
+
+BBMP has 198 wards, out of which elections were held for 197 wards. The data filed for `r nrow(bbmp[!complete.cases(bbmp),])` candidates is incomplete (missing contact details/family details etc.). As additional data is available this report will be update. you can always find the latest copy of this report at http://rpubs.com/vijayvithal/106792
+This report looks at the profile of the candidates filed by the three mainstream parties and analyses the election on various factors.
+
+# Candidate quality
+
+The education level of candidates is as follows
+
+```{r}
+x<-data.frame(bbmp$Ward.Number,bbmp$BJPCandidate.Education.Analysis,bbmp$JDCandidate.Education.Analysis,bbmp$CongressCandidate.Education.Analysis)
+colnames(x)<-c("Ward.Number","BJP.Candidate","JD.Candidate","Congress.Candidate")
+x<-x[complete.cases(x),]
+y<-melt( data=x,na.rm=TRUE,id.vars='Ward.Number')
+z<-(y[y$variable!="bbmp.Ward.Number",])
+qplot(value,data=z,geom="histogram",fill=variable)
+```
+
+The following details are missing from the data set.
+
+* Criminal records
+* Wealth
+* History of social activities
+* Connect with the constituency
+
+
+# About BBMP
+
+In 2010 the Existing BMP was mearged with surrounding CMC's, TMC's, ZP's and gram panchayat's to form BBMP. This exercise resulted in consolidation of various units of local governance with over a thousand elected representatives into a single unit with 198 elected representatives.
+
+The wards delimitation's was done based on the 2001 census which showed dense clusters in the core BMP area and sparse population in the outer wards.
+
+
+The distribution of wards among the old BMP Area (Inner wards) and new BBMP areas(Outer wards) is
+```{r}
+table(bbmp$Ward.Classification)
+```
+
+The average ward area in sq.km in inner and outer wards is
+```{r}
+tapply(bbmp$Area..sq.km.,bbmp$Ward.Classification,mean)
+```
+
+In the very next year it was evident that the wards are imbalanced, when the 2011 census showed that the outer wards had much higher population compared to the inner wards.
+
+In 2011 the average population of inner and outer wards was
+```{r}
+tapply(bbmp$Total.Population..2011.,bbmp$Ward.Classification,mean)
+```
+
+```
+## Bangalore Population Data.
+## 2001 Census: 45.92 Lakh
+## 2011 Census: 84.74 Lakh
+## 2015       : 110.0 Lakh (Estimate)
+```
+
+The average growth in population in the last decade (2001 to 2011) has been
+```{r}
+tapply(bbmp$Total.Population..2011.-bbmp$Total.Population..2001.,bbmp$Ward.Classification,mean)
+```
+
+It is estimated that the additional `r 110 -84.74` Lakh citizens are predominantly added to the outer wards.
+
+# Voter Behavior
+
+Checking for voting percentage the voter turnout this time increased by `r mean(bbmp_complete$Vote.percentage - bbmp_complete$Voter_turnout_2010)`. Dividing this data into core (Inner Wards) and non-core(Outer Wards) wards we find that the turnout increase is more in the inner wards.
+```{r}
+tapply(bbmp_complete$Vote.percentage - bbmp_complete$Voter_turnout_2010,bbmp_complete$Ward.Classification,mean)
+```
+
+However `r nrow(less_turnout)` wards showed lower turnout this year, these wards are further subdivided as follows 
+
+```{r}
+tapply(less_turnout$Vote.percentage,less_turnout$Ward.Classification,length)
+```
+The election results in 2010 were as follows
+```{r}
+tapply(bbmp$Previous.Party,bbmp$Previous.Party,length)
+```
+
+This result has changed to 
+```{r}
+tapply(bbmp$This.Winner,bbmp$This.Winner,length)
+```
+
+While the absolute numbers indicate that there was very little anti-incumbency factor, evaluating ward wise data ward indicates a strong anti incumbency current. with the citizens changing the corporator irrespective of his/her party, It is not clear whether the citizens are satisfied with an alternate instead of an alternative.
+
+```{r}
+#winners<-data.frame(bbmp$Ward.Name,bbmp$Previous.Party,bbmp$This.Winner)
+winners<-data.frame(bbmp$Previous.Party,bbmp$This.Winner)
+a<-winners[complete.cases(winners),]
+#a<-data.frame(a$bbmp.Previous.Party,a$bbmp.This.Winner)
+
+a<-subset(a,a$bbmp.Previous.Party !=a$bbmp.This.Winner)
+g<-graph_from_data_frame(a)
+E(g)$weight<-1
+h<-simplify(g)
+#plot(h)
+E(h)$curved<-.4
+E(h)$label<-E(h)$weight
+E(h)$arrow.width <- 0.3*E(h)$weight 
+l <- layout_in_circle(h)
+```
+A total of `r nrow(a)` constituency changed their party.
+
+```{r}
+plot(h,edge.width=0.2*E(h)$weight,vertex.size=44,layout=l)
+```
+The distribution of this beneficiary of this change was as follows
+```{r}
+tapply (a$bbmp.This.Winner,a$bbmp.This.Winner,length)
+```
+The distribution of seats among the inner and outer wards is
+```{r}
+table(bbmp$This.Winner,bbmp$Ward.Classification)
+#List of inner and outer wards
+
+```
+
+# Causes for Voter apathy?
+A voter percentage of less than 50% resulted in various sections of the society being blamed for its apathy. While an excellent analysis of the issues in voter turnout is presented in [Who is responsible for a low voter turnout](http://bangalore.citizenmatters.in/articles/is-bbmp-the-real-culprit-behind-bad-voter-turnout)
+Running a stastical analysis shows us that,
+
+* The voters in outer wards showed much greater participation compared to voters in Inner ward.
+* Voting percentage was higher when the choice of candidates was more.
+* The impact of gender reservation is a sub case of diversity of choice, betweeen seats reserved for women vs gender neutral seats for the same caste reservation. the difference in voter turnout is negligible.
+
+
+Typically in areas with high migrant population, The actual voting percentage is different than the reported voting percentage. This is due to two factors.
+
+* A significant percentage of people in the voters list have migrated out of the area, and their names are still in the voters list.
+* A significant number of new migrants are still not in the voters list due to voter ignorance or lethargic babudom.
+
+```{r}
+plot(x=bbmp_complete$Ward.Classification,y=bbmp_complete$Vote.percentage,main="Voting percentage across inner and outer wards",ylab="Voting Percentage",xlab="Ward Location")
+
+# second plot
+plot(as.factor(bbmp_complete$Total.candidates),bbmp_complete$Vote.percentage,main="Voting percentage as a factor of total number of candidates",ylab="Voting Percentage",xlab="Candidates/ward")
+
+lines(tapply(bbmp_complete$Vote.percentage,bbmp_complete$Total.candidates,mean))
+
+ # Third plot
+ plot(as.factor(bbmp_complete$X2015.Cateogry),bbmp_complete$Vote.percentage,main="Voting percentage as a factor of seat reservation",ylab="Voting Percentage", xlab="Seat reservation")
+ 
+```
+
+# The scenario in the next election.
+It is expected that subject to the restructuring report getting Center's nod, we may go for a re-election in less than an year.
+This election will have the following changes from the current election
+
+* Breaking up BBMP in 5 municipal corporations.
+* Ward delimitation based on the 2011 census,(Or the latest voter list?)
+* Provision for further population growth in outer wards during ward delimitation.
+
+
+```{r}
+#Ward calculations
+mean_inner_pop<- mean(bbmp[bbmp$Ward.Classification=="Inner" & complete.cases(bbmp$Total.Population..2011.),]$Total.Population..2011.)
+mean_outer_pop<- mean(bbmp[bbmp$Ward.Classification=="Outer" & complete.cases(bbmp$Total.Population..2011.),]$Total.Population..2011.)
+current_mean_outer_pop<- mean_outer_pop*(1.18^5)
+Outer_ratio<- (current_mean_outer_pop/mean_inner_pop)
+seats_inner_198<- as.integer(198/Outer_ratio)
+seats_outer_198<- 198-seats_inner_198
+seats_inner_400<- as.integer(400/(1.2*current_mean_outer_pop/mean_inner_pop))
+seats_outer_400<- 400-seats_inner_400
+```
+The current approximate mean outer wards population (assuming growth rate in these wards is 18%) is 
+`r  as.integer(current_mean_outer_pop/1000)` thousand in 2015.
+
+If the current wards are delimited in proportion to the population, then the ratio of outer to inner wards will be `r seats_outer_198/seats_inner_198` : 1.
+i.e. for existing 198 wards we will have `r seats_inner_198` inner wards and `r seats_outer_198` outer wards.
+
+The restructuring report speaks of factoring in the future increase in ward population during delimitation, this will result in distrubution of the proposed 400 wards across `r seats_inner_400` inner wards and `r seats_outer_400` outer wards.
+
+# Conclusion and future work.
+While there was a strong anti-incumbancy current, and as per some reports the winning margin for BJP was 1% or less indicating a closely fought elections, It is not clear what led to the vote swing in some seats and not in another
+
+* Projects was not an issue. Retaining wards and flipping wards had the same project spread.
+* Project amount was not an issue. We saw the same statistics for boht the retaining and flipping wards.
+* Number of candidates was not an issue.
+* In a few sample ward studies, the ward infrastructure quality was not an issue.
+
+Possible explaination which cannot be proven with the available data-set is:
+
+* Voting took place on caste and religious lines, i.e. change in demographic pattern
+* Voting took place on non-local issues(BBMP elections and Indo-Pak relations?)
+
+# Does voting for the overall winner matter
+
+A certain politician making veiled threats of "smooth" center-state relations and his opponent making similar threats of state-municipal relations raises the question of whether voting for a given party influences the ward development.
+
+Analysing the budget tells us that the influence of party on project amount is minimal. Contrary to expectations independents and JD-s recieved more than the first two positioned parties.
+```{r}
+plot(as.factor(bbmp_complete$Previous.Party),bbmp_complete$Amount,xlab=" Party",ylab="Project Amount")
+```
+
+ 
+## Recommended course of action.
+
+A volunteer based orgranision spread across Bangalore can try doing a few informal ground survey to understand why did people vote for a given candidate, 
+
+* Was it his personal reputation,
+* Was it the party,
+* Was it money-muscle power,
+* Why did some independents win and others did not?
+* Why did JD(S) which projects itself as a rural party make inroads in the city core?
+
+
+```{r}
+min_max_mean <- function( report,categorize){
+x<- rbind(tapply( report,categorize,mean),tapply(report,categorize,min),tapply(report,categorize,max),tapply( report,categorize,sd))
+ row.names(x)<-c("Mean","Min","Max","SD")
+return(x)
+  
+}
+
+
+```
