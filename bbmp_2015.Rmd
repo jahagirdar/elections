@@ -195,10 +195,10 @@ i.e. for existing 198 wards we will have `r seats_inner_198` inner wards and `r 
 The restructuring report speaks of factoring in the future increase in ward population during delimitation, this will result in distrubution of the proposed 400 wards across `r seats_inner_400` inner wards and `r seats_outer_400` outer wards.
 
 # Conclusion and future work.
-While there was a strong anti-incumbancy current, and as per some reports the winning margin for BJP was 1% or less indicating a closely fought elections, It is not clear what led to the vote swing in some seats and not in another
+While there was a strong anti-incumbancy current, and as per some reports the winning margin for BJP was 1% or less indicating a closely fought elections, It is not clear what led to the vote swing in some seats and not in other.
 
 * Projects was not an issue. Retaining wards and flipping wards had the same project spread.
-* Project amount was not an issue. We saw the same statistics for boht the retaining and flipping wards.
+* Project amount was not an issue. We saw the same statistics for both the retaining and flipping wards.
 * Number of candidates was not an issue.
 * In a few sample ward studies, the ward infrastructure quality was not an issue.
 
