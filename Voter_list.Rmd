@@ -1,0 +1,73 @@
+---
+title: "Voter list analysis"
+author: "Vijayvithal"
+date: "8 September 2015"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+# Introduction
+
+This is an analysis of the voters list for Entire Bangalore city.
+The database consists of 4 years worth of voter records, each year has over 6 million records. For each voter the following data is captured.
+
+* AC[0-9]+ This is a combination of the AC and the part number
+* [0-9]+ This is a 3 digit code
+* [0-9]+ This is the serial number
+* [A-Z]+[0-9]+ This is the voter ID Number
+* [A-Z]+ This is the voters Name
+* [FM] Voters Gender
+* [0-9]+ Voters Age
+* [A-Z]+ Voters Relative
+* [FH] Relationship with Relative
+
+# Preprocessing.
+R is not able to read the data and crashes with a memory limit message. So as a first step we will split each year's data into separate AC wise data files.
+```{r}
+#Checking which version of Perl is installed
+Sys.which('perl')
+```
+
+```{r test-perl, engine='perl'}
+use strict;
+use warnings;
+use Archive::Zip;
+my $zip = Archive::Zip->new;
+return if(-d "csvfiles"); # This is a lengthy process, skip it if the script has been run before.
+mkdir "csvfiles";
+my @files=glob("voter_record/*.zip");
+my $prevfile="ViJaY";
+foreach my $file(@files){
+  my $outfile;
+  $file=~/.*\/([^\/]*).zip/;
+  my $dirname="csvfiles/".$1;
+  mkdir $dirname;
+  $zip->read ($file);
+  foreach my $member ($zip->members){
+    next if $member->isDirectory;
+  $member->extractToFileNamed("Archive.csv");
+  open(FILE,"<Archive.csv");
+  while (<FILE>){
+    s/,/./g;
+    s/^\s*//;
+    next if (/^\s*$/);
+    my @fields=split("\t");
+    $fields[0]=~/^([A-Z]*...)/i;
+    my $ACname=$1;
+    if($prevfile ne $ACname) {
+      open (OFILE,">$dirname/$ACname.csv") or die "Unable to open file $dirname/$ACname.csv:$1 with $fields[0] fields @fields";
+      $prevfile=$ACname;
+    }
+    print OFILE $_;
+    
+  }
+  close(FILE);
+  }
+}
+# By this point we hav a folder called csvfiles which has a folder for each dataset further divided by AC's
+```
+
