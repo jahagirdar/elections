@@ -1,5 +1,5 @@
 ---
-title: "Voter list analysis"
+title: "Bangalore Demographic analysis - Jan 2013"
 author: "Vijayvithal"
 date: "8 September 2015"
 output: html_document
@@ -10,23 +10,38 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
                       echo=FALSE, warning=FALSE, message=FALSE)
 ```
 
+```{r}
+########################################
+### Setup
+########################################
+
+#Remove all variables
+rm(list =ls() )
+voter_year<-'voters_Jan13'
+library(ggplot2)
+```
+
 # Introduction
 
 This is an analysis of the voters list for Entire Bangalore city.
-The database consists of 4 years worth of voter records, each year has over 6 million records. For each voter the following data is captured.
+The database consists of 4 years worth of voter records, each year has over 6 million records. For each voter the database captures the following fields.
 
-* AC[0-9]+ This is a combination of the AC and the part number
-* [0-9]+ This is a 3 digit code
-* [0-9]+ This is the serial number
-* [A-Z]+[0-9]+ This is the voter ID Number
-* [A-Z]+ This is the voters Name
-* [FM] Voters Gender
-* [0-9]+ Voters Age
-* [A-Z]+ Voters Relative
-* [FH] Relationship with Relative
+Field   | Description
+--------|------------
+ AC[0-9]+ | A combination of the AC and the part number
+ [0-9]+ | A 3 digit code
+ [0-9]+ | Serial number
+ [A-Z]+[0-9]+ | Voter ID Number a.k.a EPIC Number
+ [A-Z]+ | Voters Name
+ [FM] | Voters Gender
+ [0-9]+ | Voters Age
+ [A-Z]+ | Voters Relative's Name
+ [FH]    | Relationship with Relative
+[A-Z] | Added/deleted/moved etc.
 
 # Preprocessing.
 R is not able to read the data and crashes with a memory limit message. So as a first step we will split each year's data into separate AC wise data files.
+For the purpose of this experiment we will take the voter List released on Jan 2013 as our reference voter list.
 ```{r}
 #Checking which version of Perl is installed
 Sys.which('perl')
@@ -37,7 +52,7 @@ use strict;
 use warnings;
 use Archive::Zip;
 my $zip = Archive::Zip->new;
-return if(-d "csvfiles"); # This is a lengthy process, skip it if the script has been run before.
+exit(0) if(-d "csvfiles"); # This is a lengthy process, skip it if the script has been run before.
 mkdir "csvfiles";
 my @files=glob("voter_record/*.zip");
 my $prevfile="ViJaY";
@@ -52,11 +67,15 @@ foreach my $file(@files){
   $member->extractToFileNamed("Archive.csv");
   open(FILE,"<Archive.csv");
   while (<FILE>){
-    s/,/./g;
-    s/^\s*//;
+    # Clean the data to remove punctuation marks which mess with the file reader.
+    s/,/./g; # Remove comma's from source file
+    s/^\s*//; # Remove Leading Spaces
+    #s/"//g; # Remove Quotation marks like "
+    #s/'/-/g; # catch single quote marks like D'souza
+    s/\t-\t/\tNA\t/g; # Replace null entries with NA
     next if (/^\s*$/);
     my @fields=split("\t");
-    $fields[0]=~/^([A-Z]*...)/i;
+    $fields[0]=~/^([A-Za-z]*...)/i;
     my $ACname=$1;
     if($prevfile ne $ACname) {
       open (OFILE,">$dirname/$ACname.csv") or die "Unable to open file $dirname/$ACname.csv:$1 with $fields[0] fields @fields";
@@ -71,3 +90,230 @@ foreach my $file(@files){
 # By this point we hav a folder called csvfiles which has a folder for each dataset further divided by AC's
 ```
 
+```{r}
+#########################
+## Function to read data for an AC, Clean the data return it.
+#########################
+read_ac<-function (filename) {
+  ac<-read.delim2(filename,header=F,
+                   colClasses = c("factor","factor","factor","factor","factor","character","character","factor","integer","character","factor","factor"),
+                   col.names = c("AC","Section","part","Serial","Door","EPIC","Name","Gender","Age","Fname","Rel","xx"),quote = "")
+  # Remove incomplete entries
+  ac<-ac[complete.cases(ac),]
+  # Remove all entries showing incorrect Age
+  ac<-ac[ac$Age>=18 & ac$Age <=110,]
+  return(ac)
+    
+}
+```
+
+# Typical demographic analysis.
+
+To validate the robustness of the dataset we can try to answer the following questions.
+
+* IISc has only post grad students (all above 18 yrs) and most of them stay on Campus. Can I Identify the polling booths for IISc?
+* Can I do something similar for IIM?
+* Does voter registration take place in election year or does it take place every year?
+* Organic growth areas should see addition of citizens at age 18 whereas migrant dominated growth areas should see addition of citizens at age 22+ can I locate the area's?
+* Plot of unmarried people vs Age. What is the mean age of marriage?
+* Identification of PG Homes, Tenent complexes etc.
+* How many houses are there in Bangalore?
+
+# Can we identify Speciality Educational Institutions?
+
+Institutions like IIM, IIsc, Medical and Engineering colleges have a large number of out station students living in Hostel. As per the ECI Rule these students are eligible for Voters ID. The question we are trying to answer is, did they apply for and get their voter ID?
+Since the prof's also live on campus we will assume a prof to student ratio of 1:20. Many of the Prof's will also have their children staying with them so some of them may 'leak' into the student category. We will check the partwise ratio and compare it with the ratio for rest of the AC to determine the feasibility of identifying IISc Polling booths.
+```{r}
+
+############################################
+# Function for Demographic analysis
+############################################
+
+list_demographic_part<-function(ac,minage=18,maxage=100,type="default",gender="NA",verbose=F){
+  age_matrix<-cbind(minage,maxage,type)
+  ret_val<-data.frame(type=factor(),part_max=factor(),max<-numeric(),part_min=factor(),min=numeric())
+   if(verbose) {
+     print(age_matrix)
+   }
+  for(row in 1:nrow(age_matrix)) { 
+    min_age<-as.integer(age_matrix[row,"minage"])
+    max_age<-as.integer(age_matrix[row,"maxage"])
+    row_type<-age_matrix[row,"type"]
+#    print(row_type)
+    if(gender=="f"){
+      ac<-ac[ac$Gender=="F",]
+    }
+    if(gender=="m"){
+      ac<-ac[ac$Gender=="M",]
+    }
+    if(gender=="o"){
+      ac<-ac[ac$Gender=="O",]
+    }
+    
+    
+    demo<-ac[ac$Age>min_age & ac$Age<max_age,]
+    demo_count<-tapply(demo$Age,demo$AC,length)
+    ac_count<-tapply(ac$Age,ac$AC,length)
+    demo_ratio<-100*demo_count/ac_count
+    demo_ratio<-demo_ratio[complete.cases(demo_ratio)]
+    rv<-tail(sort(demo_ratio),1);
+    hv<-head(sort(demo_ratio),1)
+    ret_val<-rbind(ret_val,data.frame(type=row_type,part_max=names(rv),max=as.numeric(rv),part_min=names(hv),min=as.numeric(hv))) 
+  }
+    row.names(ret_val)<-c()
+  return(ret_val)
+}
+############################################
+# Testing for Malleshwaram AC157
+############################################
+files<-"csvfiles/voters_Jan13/AC157.csv"
+
+ac<-read_ac(files);
+list_demographic_part(ac,minage = 20,maxage = 27, type="Students",verbose=T)
+```
+
+Looking up the parts with high percentage of youth compared to citizens above 27 (AC157024=78% and AC157025= 46%) gives us MSR Hostel.  So we did manage to find an educational institution, but not the one we expected to find.
+
+# Can we now find potential location for youth centers, Senior citizen facilities across Bangalore?
+
+We define a youth center as a place having significant population in between 18 to 25, a senior citizen facility as a place having significant population above 58
+
+``` {r}
+print_hdr<-T;
+results<- data.frame(type=factor(),part_max=factor(),max<-numeric(),part_min=factor(),min=numeric())
+if(!file.exists("ac_youth_senior_demographic.csv")){
+  for (files in list.files("csvfiles/voters_Jan13",pattern="*.csv$",full.names = T)){
+    #print(files)
+ac<-read_ac(files);
+    results<-rbind(results,list_demographic_part(ac,minage = c(18,58),maxage = c(27,100),type= c("Youth","Senior"),print_hdr))
+    print_hdr<-F
+  }
+  write.csv(file="ac_youth_senior_demographic.csv",x=results)
+} else {
+  results<-read.csv("ac_youth_senior_demographic.csv")
+}
+```
+The top 5 AC's which have a concentration of youth's in their part No's are
+```{r}
+ro<-results[order(results$max),]
+yo<-ro[ro$type=="Youth",]
+row.names(yo)<-c()
+tail(yo[3:4],5)
+```
+The bottom 5 AC's which have a the lowest concentration of youth's in their part No's are
+```{r}
+ro<-results[order(results$min),]
+yo<-ro[ro$type=="Youth",]
+row.names(yo)<-c()
+head(yo[5:6],5)
+```
+
+Similarly there are some areas where senior citizens form a major part of the voters and some areas without any senior citizens.
+
+The top 5 AC's which have a concentration of senior citizen's in their part No's are
+```{r}
+ro<-results[order(results$max),]
+yo<-ro[ro$type=="Senior",]
+row.names(yo)<-c()
+tail(yo[3:4],5)
+```
+The bottom 5 AC's which have a the lowest concentration of Senior's in their part No's are
+```{r}
+ro<-results[order(results$min),]
+yo<-ro[ro$type=="Senior",]
+row.names(yo)<-c()
+head(yo[5:6],5)
+```
+
+# Maritial Status
+Since it is easier to detect maritial status of the female we will check for the age of marriage.
+```{r}
+results <- data.frame( AC = factor(),Female.Age = numeric(), Female.Married = integer(), Female.Total = numeric(),Male.Total=numeric())
+if(!file.exists("ac_maritial_status.csv")){
+  for (files in list.files("csvfiles/voters_Jan13",pattern = "*.csv$",full.names = T)) {
+    #print(files)
+    ac <- read_ac(files)
+    ac_name=substr(ac[1,1],1,5)
+    females<-ac[ac$Gender=='F',]
+    males<-ac[ac$Gender=='M',]
+    age_groups<-split(females,females$Age)
+    for (age in age_groups){
+      married<-sum(age$Rel=="H")
+      total<-nrow(age)
+      results<-rbind(results,data.frame(AC=ac_name,Female.Age=age$Age[1],Female.Married=married,Female.Total=total,Male.Total=nrow(males[males$Age==age$Age[1],])))
+    }
+    
+  }
+  write.csv("ac_maritial_status.csv")
+} else {
+  results<-read.csv("ac_maritial_status.csv")
+}
+ggplot(results,aes(x=Female.Age,y=(100*Female.Married/Female.Total),color=AC)) +geom_point() +labs (color="Assembly Constituency Number",y="Females: % Married")
+
+```
+
+We see that depending on the AC, from 12-25% of the females get married at the age of 18 (It is surprising to see that not even a single AC is at 0% at 18) and grows exponentially until we reach a peak at around 37. Around 90 we start seeing a relation other than husband again being used.
+
+Checking for the Male:Female ratio
+``` {r}
+below_90<-results[results$Female.Age<90,]
+ggplot(below_90,aes(x=Female.Age,y=(100*(Male.Total-Female.Total)/(Male.Total + Female.Total)))) +geom_smooth() +labs(y="Total Males - Total Females")
+
+```
+We see that at the age of 18 we have 10% More males compared to Females. This ratio falls down to nearly 0% by the age of 30 after which it stabilizes to 5% more males till the age of 60-70 from the age of 90+ Male % starts falling and reaches 0% by the age of 100. Post 100 The % goes in negative, but this may be due to wrong record keeping by the EC and can be a stastical anolmoly due to the low voter count in this age range.
+```{r}
+ above_90<-results[results$Female.Age>90,]
+ ggplot(above_90,aes(x=Female.Age,y=(100*(Male.Total-Female.Total)/(Male.Total + Female.Total)))) +geom_smooth() +labs(y="Total Males - Total Females")
+```
+
+# Where should govt. invest in child care and schools?
+
+The typical child bearing age of a female is upto 32,We will assume that girls have their first child by 27 and second by 30-32 years.
+
+So subtracting 27 from the age of all women above 27 will give us approximate age of the first child and subtracting 31 will give the approximate age of the second child. We will be using this data to identify AC's which require pre-schools, Schools, and PU Colleges. We will project the requirement for the next 3 years.
+i.e. 
+
+* Kids from 0-3 will count towards preschool
+* Kids from 3-6 will count towards school.
+* Kids from 13 to 16 will count towards PU College
+
+```{r}
+results <- data.frame( AC = factor(),category = factor(), count = numeric(),Standard.Deviation = numeric() )
+if(!file.exists("ac_child_age_estimate.csv")){
+for (files in list.files("csvfiles/voters_Jan13",pattern = "*.csv$",full.names = T)) {
+#print(files)
+ac<-read_ac(files)
+first_child <- ac[ac$Age > 27 & ac$Gender == "F",]
+first_child$Age <- first_child$Age - 27
+second_child <- ac[ac$Age > 31 & ac$Gender == "F",]
+second_child$Age <- second_child$Age - 31
+child = rbind(first_child,second_child)
+preschool_age <- nrow(child[child$Age <= 3,])
+preschool_sd <- sd(child[child$Age <= 3,]$Age,na.rm = TRUE)
+school_age <- nrow(child[child$Age > 3 & child$Age <= 6,])
+school_sd <- sd(child[child$Age > 3 & child$Age <= 6,]$Age,na.rm = TRUE)
+pu_age <- nrow(child[child$Age <= 16 & child$Age > 13,])
+pu_sd <- sd(child[child$Age <= 16 & child$Age > 13,]$Age,na.rm = TRUE)
+results <- rbind( results,data.frame( AC = substr(ac[1,1],1,5), category = "Preschool", count = preschool_age, Standard.Deviation = preschool_sd ) )
+results <- rbind( results,data.frame( AC = substr(ac[1,1],1,5), category = "School", count = school_age, Standard.Deviation = school_sd ) )
+results <- rbind ( results,data.frame( AC = substr(ac[1,1],1,5), category = "PU", count = pu_age, Standard.Deviation = pu_sd ) )
+
+}
+write.csv(file="ac_child_age_estimate.csv",x=results)
+  } else {
+  results<-read.csv("ac_child_age_estimate.csv")
+}
+cc<-results[complete.cases(results),]
+ggplot(cc, aes(AC,count,fill=category))+geom_bar(stat="identity",position="dodge") +coord_flip()
+
+```
+
+The top-5 AC's which need to invest in pre-schools are.
+```{r}
+head(results[order(count) & category=="Preschool",1:3],5)
+
+```
+The top-5 AC's which need to invest in PU-Colleges are.
+```{r}
+head(results[order(count) & category=="PU",1:3],5)
+```
