@@ -310,10 +310,15 @@ ggplot(cc, aes(AC,count,fill=category))+geom_bar(stat="identity",position="dodge
 
 The top-5 AC's which need to invest in pre-schools are.
 ```{r}
-head(results[order(count) & category=="Preschool",1:3],5)
+results<-results[order(results$count),]
+tail(results[results$category=="Preschool",],5)
 
 ```
 The top-5 AC's which need to invest in PU-Colleges are.
 ```{r}
-head(results[order(count) & category=="PU",1:3],5)
+tail(results[order(results$count) & results$category=="PU",],5)
+```
+
+```{r}
+#results
 ```

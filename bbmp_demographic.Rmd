@@ -1,34 +1,46 @@
 ---
+title: "Bangalore demographics"
+author: "Vijayvithal"
 output: html_document
-author: Vijayvithal
-title: Bangalore demographics
 ---
 
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
                       echo=FALSE, warning=FALSE, message=FALSE)
 ```
+
+
 # Introduction
 
-This document uses the voterlist data for conducting a demographic analysis of Bangalore. While the data is extensive, ECI is known to have poor data entry and maintainance habits.
+This document uses the voter list data for conducting a demographic analysis of Bangalore.
+
+We will be using the ward wise age distribution data to check whether we can identify certain characteristics of the city.
+
+We see that overall across Bangalore the age distribution peaks at around 30-35 years and then gradually falls until 80.
 
 ```{r}
 ages<-read.delim("ages_by_ward.txt")
 plot(unique(ages$Age),tapply(ages$Voters,ages$Age,mean,omit=TRUE),ylab="Voter count", xlab="Age",main="Voters In Bangalore")
 ```
-We see that the age distribution peaks at around 30-35 years and then gradually falls until 80.
-We will see if we can identify the pensioners paradise, student enclaves, working singles, working families and migrant areas of bangalore based on the voter data.
+
+As a first cut analysis to check the robustness of the data we will see whether we can identify demographic distribution across wards and correlate the distribution with supporting evidence.
+
+We will try to statistically predict areas of Bangalore that are pensioners paradise, student enclaves, working singles, working families and migrant areas based on the voter data.
+
 The different groupings are defined as follows.
 
 * Students: Age group 18 to 22 yrs
 * Working singles: 22 to 26(Women) 28(men) we will take an average of 27 as the upper bound
 * Working families: 27 to 58
+** Further divided in IT Families (27 to 40), Mix families (40 to50) and Non IT Families (50 to 58)
 * Retired Citizens: 58 to 62
 * Senior Citizens 62+
-* Migrant Areas:Large working population with a spike around retirement age when parents relocate to be there with the children.
+* Migrant Areas:Large young working population with a spike around retirement age when parents relocate to be with the children.
 
-Since the absolute ward population can differ we will represent each of this group as a percentage of the total ward population.
 ```{r}
+
+#Since the absolute ward population can differ we will represent each of this group as a percentage of the total ward population.
+###############################
 #df<- data.frame(ward=character(),total=numeric(),students=numeric(),singles=numeric(),families=numeric(),retired=numeric(),seniors=numeric())
 #  for (ward in unique(ages$Ward)){
 #  av<-ages[ages$Ward==ward,]
@@ -54,30 +66,24 @@ Since the absolute ward population can differ we will represent each of this gro
 ####
 # The code above was used to generate a csv file to which data related to ward/ac/zone were added. We will directly read in the csv file
 ####
+
 ag_data<- read.csv("age_df.csv")
-quant_it<-quantile(ag_data$ITfamilies,probs=(0:10)/10)
+quant_it<- quantile(ag_data$ITfamilies,probs=(0:10)/10)
 ```
 
 
-Which groups contain interesting data?
+# Which groups contain interesting data?
 
-The standard deviation for students and retired groups is very low, we find high deviation for New families and senior citizens group.
-Analysing these two sets of data...
+We will be studying variance across wards for each demographic group. Our focus will to to study areas with high variance. The standard deviation across groups is,
 
 ``` {r}
-
-
 tmp <- data.frame(name=character(),sd=numeric())
-              
-for (var in colnames(ag_data)) {
+for (var in colnames(ag_data[8:14])) {
 if(is.numeric(ag_data[[var]])) {
 x <- quantile(ag_data[[var]],probs=(0:10)/10)
 sdd <- sd(ag_data[[var]])
-  
 tmp <- rbind(tmp,data.frame(name=var,sd=sdd))
-             
 }
-  
 }
 
 tmp
@@ -89,41 +95,51 @@ tmp
 
 ```
 
+Checking the standard deviation for each of the identified groups across 198 wards, we find that the deviation for students and retired groups is very low across the wards.
 
-Potential issues with the analysis.
+It either means that they are uniformly distributed across the city, or in case of students, if there is a student enclave (around engineering schools, medical colleges, IISc and IIM's) it is not showing up because outstation students have not registered in the local voters list.
 
-* Typically college students staying in hostels do not register for a voter card unless there is a dedicated voter registration drive in that college.
-* Migrant population face discrimination from the government machinery and may not show up in full strength on the voter list.
+We find high deviation for New families (27-40 age range) and senior citizens(62+) group.
 
-# Initial tests
+Analyzing these two sets of data...
 
-Where are the Young families settling down?
+# Where are the young families settling down?
+
 The system tells us that young families are settling down in 
 
 * Mahadevapura(5 wards)
 * Bommanahalli(4 wards)
 * Dasarhalli (4 wards)
+* Along with a few wards in the neighborhood of the above wards.
 
-Along with a few wards in the neighbourhood of the above wards.
 Checking on the map we see 
 
 * Mahadevapura contains various IT parks on Outer ring road between Kr Puram and Sarjapur, ITPL, Bagmane tech park.
 * Dasarhalli contains the Peenya Industrial Area
-* Bommanahalli is close to Electronic city (confirm?)
+* Bommanahalli is close to both ORR tech parks and Electronic city.
+* Begur is close to electronic city.
+
+So the presence of these job providers has resulted in increasing the density of young workers in these areas.
+
+Why haven't the new clusters like Manyata tech park shown up in this list? We may have to plot the relationship between setting up of a tech park and its influence in the community over time in order to predict the time required for these new tech park to change the demographic.
 
 ```{r}
 quant_it<-quantile(ag_data$ITfamilies,probs=(0:10)/10)
 ag_data[ag_data$ITfamilies>quant_it['90%'],2:5]
 ```
 
-Which are the "Pensioners paradise?"
-The data reports old bangalore areas as the areas where citizens above 60 years are clustered.
+# Where are the "Pensioners paradise?"
+
+Bangalore was once upon a time known as pensioners paradise, so where exactly are the senior citizens settling down?
+
+The data reports old Bangalore areas as the areas where citizens above 60 years are clustered.
 ```{r}
 auant_it<-quantile(ag_data$seniors,probs=(0:10)/10)
 ag_data[ag_data$seniors>auant_it['90%'],2:5]
 ```
 
 Measuring the quartiles across each ward we get
+
 ```{r}
 age_quartile<-function(ages) {
   retval<- c()
@@ -142,8 +158,10 @@ lines(y=df_r$`25%`,x=18:(18+112),col="red")
 lines(y=df_r$`50%`,x=18:(18+112),col="green")
 lines(y=df_r$`75%`,x=18:(18+112),col="blue")
 lines(y=df_r$`00%`,x=18:(18+112),col="cyan")
-
-
 ```
 
-
+# Conclusion and future work.
+ 
+* Looking at historic trends can help us understand the impact of current activities over time.
+* Breaking down the data to polling booth level will help understand whether student enclaves are missing due to non-registration or they are getting merged in the overall population.
+* Areas which should have shown a deviation for a given demographic but is not, is an indicator for a dedicated voter registration effort by ECI.
